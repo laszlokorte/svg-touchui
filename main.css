@@ -1,0 +1,36 @@
+*, *::before, *::after {
+	box-sizing: border-box;
+}
+
+html, body {
+	margin: 0;
+}
+
+.container {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-columns: 1fr;
+	grid-template-rows: 1fr;
+	justify-content: stretch;
+	align-content: stretch;
+	background: #fffff0;
+}
+
+svg {
+	outline: 1px solid #ff00ff;
+	display: block;
+	width: 100%;
+	height: 100%;
+	touch-action: none;
+}
+.is-zoomable {
+	cursor: zoom-in;
+}
+
+.is-rotatable {
+}
+
+.is-draggable {
+	cursor: move;
+}
