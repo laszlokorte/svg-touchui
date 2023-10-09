@@ -99,7 +99,7 @@ function makeInteractive(svgElement) {
   };
 
   function setupDebugger(containerElement) {
-    function createDebugCircle(color = 'red') {
+    function createDebugCircle(color = 'magenta') {
       var _cx = 0, _cy = 0, _show = false;
 
       var circle = containerElement.ownerDocument.createElementNS(xmlnsSvg, 'circle')
@@ -109,7 +109,7 @@ function makeInteractive(svgElement) {
       circle.setAttribute('cy', 0)
       circle.setAttribute('pointer-events', 'none')
       circle.setAttribute('fill', color)
-      circle.setAttribute('fill-opacity', 0.5)
+      circle.setAttribute('fill-opacity', 0.9)
       circle.style.display = 'none'
       containerElement.appendChild(circle)
 
@@ -132,7 +132,7 @@ function makeInteractive(svgElement) {
       };
     }
 
-    function createDebugAngle(length = 200, color = 'red') {
+    function createDebugAngle(length = 200, color = 'magenta') {
       var _rad = 0
       var _show = false
       var line = containerElement.ownerDocument.createElementNS(xmlnsSvg, 'line')
@@ -142,7 +142,7 @@ function makeInteractive(svgElement) {
       line.setAttribute('pointer-events', 'none')
       line.setAttribute('stroke', color)
       line.setAttribute('stroke-width', 20)
-      line.setAttribute('stroke-opacity', 0.5)
+      line.setAttribute('stroke-opacity', 0.9)
       line.style.display = 'none'
       containerElement.appendChild(line)
 
@@ -164,7 +164,7 @@ function makeInteractive(svgElement) {
       };
     }
 
-    function createDebugScale(color = 'red') {
+    function createDebugScale(color = 'magenta') {
       var _value = 0
       var _show = false
       var circle = containerElement.ownerDocument.createElementNS(xmlnsSvg, 'circle')
@@ -174,7 +174,7 @@ function makeInteractive(svgElement) {
       circle.setAttribute('cy', 0)
       circle.setAttribute('pointer-events', 'none')
       circle.setAttribute('fill', color)
-      circle.setAttribute('fill-opacity', 0.5)
+      circle.setAttribute('fill-opacity', 0.9)
       circle.style.display = 'none'
       containerElement.appendChild(circle)
 
@@ -195,7 +195,7 @@ function makeInteractive(svgElement) {
       };
     }
 
-    function createDebugText(color = 'red', offset = 0) {
+    function createDebugText(color = 'magenta', offset = 0) {
       var text = containerElement.ownerDocument.createElementNS(xmlnsSvg, 'text')
       var _textNode = document.createTextNode("")
       var _show = false
@@ -205,7 +205,7 @@ function makeInteractive(svgElement) {
       text.setAttribute('font-size', 150)
       text.setAttribute('pointer-events', 'none')
       text.setAttribute('fill', color)
-      text.setAttribute('fill-opacity', 0.5)
+      text.setAttribute('fill-opacity', 0.9)
       text.setAttribute('text-anchor', 'middle')
       text.setAttribute('dominant-baseline', 'middle')
       text.style.display = 'none'
@@ -232,15 +232,15 @@ function makeInteractive(svgElement) {
 
     return {
       touches: [],
+      debugTouchScale: createDebugScale('cyan'),
       debugMouseWheel: createDebugAngle(),
       debugMousePointer: createDebugCircle(),
       debugMousePointerInitial: createDebugCircle(),
-      debugTouchCenter: createDebugCircle('green'),
-      debugTouchCenterInitial: createDebugCircle('cyan'),
-      debugTouchAngle: createDebugAngle(200, 'blue'),
-      debugTouchAngleText: createDebugText('blue', 100),
-      debugTouchScale: createDebugScale('blue'),
-      debugTouchCount: createDebugText('blue', -100),
+      debugTouchCenter: createDebugCircle('red'),
+      debugTouchCenterInitial: createDebugCircle('green'),
+      debugTouchAngle: createDebugAngle(200, 'magenta'),
+      debugTouchAngleText: createDebugText('purple', 100),
+      debugTouchCount: createDebugText('purple', -100),
       accumulatedAngle: 0,
       accumulatedScale: 1,
       accumulatedOffsetX: 0,
@@ -306,7 +306,7 @@ function makeInteractive(svgElement) {
     if(elRotator) {
       elRotator.setAttribute('transform', 
         'translate('+(debug.accumulatedMouseX+debug.accumulatedOffsetX)+','+(debug.accumulatedMouseY+debug.accumulatedOffsetY)+')' + ' ' +
-        'rotate('+rad2Deg(-debug.accumulatedAngle)+')' + ' ' +
+        'rotate('+rad2Deg(debug.accumulatedAngle)+')' + ' ' +
         'scale('+(Math.exp(debug.accumulatedWheel/100)*debug.accumulatedScale)+')'
        )
     }

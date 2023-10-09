@@ -14,9 +14,9 @@ html, body {
 	grid-template-rows: 3fr 1fr;
 	justify-content: stretch;
 	align-content: stretch;
-	background: #fffff0;
 	height: 100%;
 	width: 100%;
+	background: #fefefe;
 }
 
 svg {
@@ -26,6 +26,7 @@ svg {
 	height: 100%;
 	touch-action: none;
 	grid-row: 1;
+	background: #fffff0;
 }
 .is-zoomable {
 	cursor: zoom-in;

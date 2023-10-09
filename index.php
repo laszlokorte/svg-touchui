@@ -12,8 +12,8 @@
 	<div class="container">
 		<svg onload="makeInteractive(this)" can-magnify can-pan use-bounds viewBox="-500 -500 1000 1000" width="800" height="500" preserveAspectRatio="xMidYMid meet">
 			<g can-rotate use-bounds>
-				<rect x="-500" y="-500" width="1000" height="1000" fill="#eee"></rect>
-				<circle r="50" cx="0" cy="0"></circle>
+				<rect x="-500" y="-500" width="1000" height="1000" fill="#e7e7e7" stroke-dasharray="10 10" stroke="black"></rect>
+				<circle fill="#e1007a" r="50" cx="0" cy="0"></circle>
 			</g>
 			<g show-debug class="light-overlay"></g>
 		</svg>
