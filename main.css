@@ -11,10 +11,12 @@ html, body {
 	inset: 0;
 	display: grid;
 	grid-template-columns: 1fr;
-	grid-template-rows: 1fr;
+	grid-template-rows: 3fr 1fr;
 	justify-content: stretch;
 	align-content: stretch;
 	background: #fffff0;
+	height: 100%;
+	width: 100%;
 }
 
 svg {
@@ -23,6 +25,7 @@ svg {
 	width: 100%;
 	height: 100%;
 	touch-action: none;
+	grid-row: 1;
 }
 .is-zoomable {
 	cursor: zoom-in;
@@ -33,4 +36,8 @@ svg {
 
 .is-draggable {
 	cursor: move;
+}
+
+.light-overlay {
+	opacity: 0.4;
 }

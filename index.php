@@ -4,6 +4,7 @@
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<title>SVG Touch UI</title>
+	<link rel="icon" href="favicon.svg">
 	<link rel="stylesheet" href="main.css">
 	<script src="main.js"></script>
 </head>
@@ -14,6 +15,7 @@
 				<rect x="-500" y="-500" width="1000" height="1000" fill="#eee"></rect>
 				<circle r="50" cx="0" cy="0"></circle>
 			</g>
+			<g show-debug class="light-overlay"></g>
 		</svg>
 	</div>
 </body>
