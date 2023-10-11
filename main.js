@@ -8,22 +8,28 @@ function makeInteractive(svgElement) {
 
   var controls = {
   	mouse: {
-  		pressed: false,
+  		isPressed: false,
   		movementDistance: 0,
-      previousPressed: null,
-      initialPressed: null,
+      previousPressedPosition: null,
+      initialPressedPosition: null,
+      initialShift: false,
+      initialAlt: false,
+      initialCtrl: false,
   	},
     wheel: {
       time: null,
     },
   	touch: {
   		ids: [],
+      positions: [],
       previousDistance: null,
       previousAngle: null,
-      previousCenter: null,
+      previousCenterLocal: null,
+      previousCenterGlobal: null,
       initialDistance: null,
       initialAngle: null,
-      initialCenter: null,
+      initialCenterLocal: null,
+      initialCenterGlobal: null,
   	},
   	tap: {
   		pageX: null,
@@ -99,12 +105,12 @@ function makeInteractive(svgElement) {
   };
 
   function setupDebugger(containerElement) {
-    function createDebugCircle(color = 'magenta') {
+    function createDebugCircle(color = 'magenta', radius = 50) {
       var _cx = 0, _cy = 0, _show = false;
 
       var circle = containerElement.ownerDocument.createElementNS(xmlnsSvg, 'circle')
       circle.classList.add('debug-helper')
-      circle.setAttribute('r', 50)
+      circle.setAttribute('r', radius)
       circle.setAttribute('cx', 0)
       circle.setAttribute('cy', 0)
       circle.setAttribute('pointer-events', 'none')
@@ -230,17 +236,18 @@ function makeInteractive(svgElement) {
       };
     }
 
+    var touchPositions = [];
+    var debugTouchScale = createDebugScale('cyan')
+    var debugMouseWheel = createDebugAngle()
+    var debugMousePointerInitial = createDebugCircle('pink', 40)
+    var debugMousePointer = createDebugCircle('magenta', 20)
+    var debugTouchCenter = createDebugCircle('red')
+    var debugTouchCenterInitial = createDebugCircle('green')
+    var debugTouchAngle = createDebugAngle(200, 'magenta')
+    var debugTouchAngleText = createDebugText('purple', 100)
+    var debugTouchCount = createDebugText('purple', -100)
+
     return {
-      touches: [],
-      debugTouchScale: createDebugScale('cyan'),
-      debugMouseWheel: createDebugAngle(),
-      debugMousePointer: createDebugCircle(),
-      debugMousePointerInitial: createDebugCircle(),
-      debugTouchCenter: createDebugCircle('red'),
-      debugTouchCenterInitial: createDebugCircle('green'),
-      debugTouchAngle: createDebugAngle(200, 'magenta'),
-      debugTouchAngleText: createDebugText('purple', 100),
-      debugTouchCount: createDebugText('purple', -100),
       accumulatedAngle: 0,
       accumulatedScale: 1,
       accumulatedOffsetX: 0,
@@ -248,21 +255,65 @@ function makeInteractive(svgElement) {
       accumulatedWheel: 0,
       accumulatedMouseX: 0,
       accumulatedMouseY: 0,
-      createDebugCircle: createDebugCircle,
-      createDebugAngle: createDebugAngle,
-      createDebugScale: createDebugScale,
-      createDebugText: createDebugText,
       refresh() {
-        this.touches.forEach(t => t.refresh())
-        this.debugMouseWheel.refresh()
-        this.debugMousePointer.refresh()
-        this.debugMousePointerInitial.refresh()
-        this.debugTouchCenter.refresh()
-        this.debugTouchCenterInitial.refresh()
-        this.debugTouchAngle.refresh()
-        this.debugTouchAngleText.refresh()
-        this.debugTouchScale.refresh()
-        this.debugTouchCount.refresh()
+        debugMouseWheel.setVisible(true)
+        debugMouseWheel.setValue(deg2Rad(this.accumulatedWheel) * 2)
+
+        while(touchPositions.length < controls.touch.positions.length) {
+          var newCircle = createDebugCircle()
+          touchPositions.push(newCircle)
+        }
+
+        debugMousePointer.setVisible(controls.mouse.isPressed)
+        debugMousePointerInitial.setVisible(controls.mouse.isPressed)
+        if(controls.mouse.initialPressedPosition) {
+          debugMousePointerInitial.setPosition(controls.mouse.initialPressedPosition.x, controls.mouse.initialPressedPosition.y)
+        }
+        if(controls.mouse.previousPressedPosition) {
+          debugMousePointer.setPosition(controls.mouse.previousPressedPosition.x, controls.mouse.previousPressedPosition.y)
+        }
+
+        touchPositions.forEach(t => t.setVisible(false))
+
+        for(var t=0;t<controls.touch.positions.length;t++) {
+          var p = controls.touch.positions[t];
+          touchPositions[t].setVisible(true)
+          touchPositions[t].setPosition(p.x, p.y)
+        }
+
+        debugTouchCenter.setVisible(controls.touch.positions.length > 1)
+        debugTouchCenterInitial.setVisible(controls.touch.positions.length > 1)
+        debugTouchAngle.setVisible(controls.touch.positions.length > 1)
+        debugTouchAngleText.setVisible(controls.touch.positions.length > 1)
+        debugTouchScale.setVisible(controls.touch.positions.length > 1)
+        debugTouchCount.setVisible(controls.touch.positions.length > 0)
+        debugTouchCount.setValue(controls.touch.positions.length)
+
+        if(controls.touch.previousCenterLocal) {
+          debugTouchCenter.setPosition(controls.touch.previousCenterLocal.x, controls.touch.previousCenterLocal.y)
+        }
+
+        if(controls.touch.initialCenterLocal) {
+          debugTouchCenterInitial.setPosition(controls.touch.initialCenterLocal.x, controls.touch.initialCenterLocal.y)
+        }
+
+        if(controls.touch.previousDistance) {
+          debugTouchScale.setValue(controls.touch.previousDistance)
+        }
+
+        debugTouchAngle.setValue(this.accumulatedAngle)
+        debugTouchAngleText.setValue(Math.round(rad2Deg(controls.touch.previousAngle)))
+
+        touchPositions.forEach(t => t.refresh())
+        debugMouseWheel.refresh()
+        debugMousePointer.refresh()
+        debugMousePointerInitial.refresh()
+        debugTouchCenter.refresh()
+        debugTouchCenterInitial.refresh()
+        debugTouchAngle.refresh()
+        debugTouchAngleText.refresh()
+        debugTouchScale.refresh()
+        debugTouchCount.refresh()
       }
     }
   }
@@ -276,20 +327,59 @@ function makeInteractive(svgElement) {
     bounds.maxY = maxY
   }
 
-  function performZoom(pivotX, pivotY, factor) {
+  function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v))
+  }
 
+  function performZoom(pivotX, pivotY, factor) {
+    var newZoom = camera.target.zoom * factor
+    var clampedZoom = clamp(newZoom, 0.1, 5)
+    var realFactor = clampedZoom / camera.target.zoom
+
+    camera.target.zoom = clampedZoom
+
+    var panFactor = 1 - 1 / realFactor;
+
+    var newX = camera.target.x + (pivotX - camera.target.x) * panFactor
+    var newY = camera.target.y + (pivotY - camera.target.y) * panFactor
+    camera.target.x = newX
+    camera.target.y = newY
   }
 
   function performPan(deltaX, deltaY) {
+    var newX = camera.target.x + deltaX
+    var newY = camera.target.y + deltaY
 
+    var clampedX = clamp(newX, -500, 500)
+    var clampedY = clamp(newY, -500, 500)
+
+    camera.target.x = clampedX
+    camera.target.y = clampedY
   }
 
-  function performRotation(pivotX, pivotY, angleDegree) {
+  function performRotation(pivotX, pivotY, angleRad) {
+    var newAngle = camera.target.angle + angleRad
 
+    var clampedAngle = clamp(newAngle, -Math.PI/3, Math.PI/3)
+    var angleDelta = clampedAngle - camera.target.angle
+
+    camera.target.angle = clampedAngle
+
+    var dx = camera.target.x - pivotX;
+    var dy = camera.target.y - pivotY;
+    var sin = Math.sin(-angleDelta)
+    var cos = Math.cos(-angleDelta)
+
+    var newX = pivotX + (cos * dx - sin * dy)
+    var newY = pivotY + (sin * dx + cos * dy)
+    camera.target.x = newX
+    camera.target.y = newY
   }
 
   function performGesture(gesture) {
-
+    performZoom(gesture.pivot.x, gesture.pivot.y, gesture.scale)
+    performRotation(gesture.pivot.x, gesture.pivot.y, gesture.angle)
+    performPan(gesture.panX, gesture.panY)
   }
 
   function retargetCamera() {
@@ -305,15 +395,20 @@ function makeInteractive(svgElement) {
   function render() {
     if(elRotator) {
       elRotator.setAttribute('transform', 
-        'translate('+(debug.accumulatedMouseX+debug.accumulatedOffsetX)+','+(debug.accumulatedMouseY+debug.accumulatedOffsetY)+')' + ' ' +
-        'rotate('+rad2Deg(debug.accumulatedAngle)+')' + ' ' +
-        'scale('+(Math.exp(debug.accumulatedWheel/100)*debug.accumulatedScale)+')'
+        (canPan ? ('translate('+(-camera.current.x)+','+(-camera.current.y)+') ') : '') +
+        (canRotate ? ('rotate('+rad2Deg(camera.current.angle)+' '+camera.current.x+' '+camera.current.y+') ') : '') +
+        (canPan ? ('translate('+(camera.current.x)+','+(camera.current.y)+') ') : '') +
+        (canZoom ? ('scale('+(camera.current.zoom)+')') : '') 
+        + (canPan ? ('translate('+(-camera.current.x)+','+(-camera.current.y)+') ') : '')
        )
     }
   }
 
   function runSubTick() {
-
+    camera.current.zoom = camera.target.zoom
+    camera.current.x = camera.target.x
+    camera.current.y = camera.target.y
+    camera.current.angle = camera.target.angle
   }
 
   function runTick() {
@@ -334,9 +429,34 @@ function makeInteractive(svgElement) {
 
   function onWheel(evt) {
     evt.preventDefault()
-    debug.debugMouseWheel.setVisible(true)
-    debug.accumulatedWheel += (evt.deltaY || evt.deltaX) / -20
-    debug.debugMouseWheel.setValue(rad2Deg(debug.accumulatedWheel))
+    const targetRect = svgElement.getBoundingClientRect();
+    var local = screenToSVG(
+      evt.clientX, evt.clientY,
+      targetRect, 
+      svgElement.clientWidth, svgElement.clientHeight, 
+      viewBox
+    )
+
+    var d = (evt.deltaY || evt.deltaX) / -38
+    debug.accumulatedWheel += d
+
+    if(evt.ctrlKey) {
+      performGesture({
+        pivot: svgToCamera(local),
+        panX: 0,
+        panY: 0,
+        angle: d / 20,
+        scale: 1,
+      })
+    } else {
+      performGesture({
+        pivot: svgToCamera(local),
+        panX: 0,
+        panY: 0,
+        angle: 0,
+        scale: Math.exp(d / 20),
+      })
+    }
   }
 
   //--
@@ -346,14 +466,14 @@ function makeInteractive(svgElement) {
   }
 
   function onMouseDown(evt) {
-    if(!controls.mouse.pressed) {
-      controls.mouse.pressed = true
+    if(!controls.mouse.isPressed) {
+      controls.mouse.isPressed = true
       onMouseMovePressed(evt, true)
     }
   }
 
   function onMouseMove(evt) {
-    if(!controls.mouse.pressed) {
+    if(!controls.mouse.isPressed) {
       return
     }
 
@@ -369,37 +489,90 @@ function makeInteractive(svgElement) {
       viewBox
     )
 
-
-
     if(initial) {
-      controls.mouse.initialPressed = local
-
-      debug.debugMousePointer.setVisible(true)
-      debug.debugMousePointerInitial.setVisible(true)
-      debug.debugMousePointerInitial.setPosition(local.x, local.y)
-    } else if(controls.mouse.previousPressed) {
-      var translationDeltaX = controls.mouse.previousPressed.x - local.x
-      var translationDeltaY = controls.mouse.previousPressed.y - local.y
-
+      controls.mouse.initialPressedPosition = local
+      controls.mouse.initialAlt = evt.altKey
+      controls.mouse.initialShift = evt.shiftKey
+      controls.mouse.initialMeta = evt.metaKey
+      controls.mouse.initialCtrl = evt.ctrlKey
+    } else if(controls.mouse.previousPressedPosition) {
+      var translationDeltaX = controls.mouse.previousPressedPosition.x - local.x
+      var translationDeltaY = controls.mouse.previousPressedPosition.y - local.y
 
       debug.accumulatedMouseX = debug.accumulatedMouseX - translationDeltaX
       debug.accumulatedMouseY = debug.accumulatedMouseY - translationDeltaY
+
+      if(controls.mouse.initialCtrl) {
+        var dxA = controls.mouse.previousPressedPosition.x - controls.mouse.initialPressedPosition.x
+        var dyA = controls.mouse.previousPressedPosition.y - controls.mouse.initialPressedPosition.y
+        var dxB = local.x - controls.mouse.initialPressedPosition.x
+        var dyB = local.y - controls.mouse.initialPressedPosition.y
+        var rotA = Math.atan2(dyA, dxA)
+        var rotB = Math.atan2(dyB, dxB)
+
+        if(Math.hypot(dxB, dyB) > 30) {
+          performGesture({
+            pivot: svgToCamera(controls.mouse.initialPressedPosition),
+            panX: 0,
+            panY: 0,
+            angle: rotationDelta(rotB, rotA, 1),
+            scale: Math.exp((Math.hypot(dxB, dyB)-Math.hypot(dxA, dyA))/500),
+            //angle: (dxB-dxA)/300,
+            //scale: Math.exp((dyB-dyA)/300),
+          })
+        }
+      } else if(controls.mouse.initialAlt) {
+        var dxA = controls.mouse.previousPressedPosition.x - controls.mouse.initialPressedPosition.x
+        var dyA = controls.mouse.previousPressedPosition.y - controls.mouse.initialPressedPosition.y
+        var dxB = local.x - controls.mouse.initialPressedPosition.x
+        var dyB = local.y - controls.mouse.initialPressedPosition.y
+        var rotA = Math.atan2(dyA, dxA)
+        var rotB = Math.atan2(dyB, dxB)
+
+        if(Math.hypot(dxB, dyB) > 30) {
+          performGesture({
+            pivot: svgToCamera(controls.mouse.initialPressedPosition),
+            panX: 0,
+            panY: 0,
+            angle: 0,
+            scale: Math.exp(((dxB-dxA) + (dyA-dyB))/500),
+            // alternative translation:
+            //angle: (dxB-dxA)/300,
+            //scale: Math.exp((dyB-dyA)/300),
+          })
+        }
+      } else {
+        performGesture({
+          pivot: svgToCamera(controls.mouse.initialPressedPosition),
+          panX: 1/camera.current.zoom * (Math.cos(-camera.current.angle) * translationDeltaX - Math.sin(-camera.current.angle) * translationDeltaY),
+          panY: 1/camera.current.zoom * (Math.sin(-camera.current.angle) * translationDeltaX + Math.cos(-camera.current.angle) * translationDeltaY),
+          angle: 0,
+          scale: 1,
+        })
+      }
     }
 
-    debug.debugMousePointer.setPosition(local.x, local.y)
-    controls.mouse.previousPressed = local
+    controls.mouse.previousPressedPosition = local
   }
 
   function onMouseUp(evt) {
-    if(controls.mouse.pressed) {
-      controls.mouse.pressed = false
+    if(controls.mouse.isPressed) {
+      controls.mouse.isPressed = false
+
       onMousePressedUp(evt)
+
+      controls.mouse.movementDistance = 0
+      controls.mouse.previousPressedPosition = null
+      controls.mouse.initialPressedPosition = null
+      controls.mouse.initialAlt = false
+      controls.mouse.initialShift = false
+      controls.mouse.initialMeta = false
+      controls.mouse.initialCtrl = false
     }
   }
 
   function onMousePressedUp(evt) {
-      debug.debugMousePointer.setVisible(false)
-      debug.debugMousePointerInitial.setVisible(false)
+
   }
 
   function onClick(evt) {
@@ -516,10 +689,7 @@ function makeInteractive(svgElement) {
 
   function onTouchStart(evt) {
     evt.preventDefault()
-    var len = evt.changedTouches.length;
-    while(len--) {
-      debug.touches.push(debug.createDebugCircle())
-    }
+
 
     var newIds = Array.prototype.map.call(evt.changedTouches, t => t.identifier)
     controls.touch.ids.push(...newIds)
@@ -535,6 +705,8 @@ function makeInteractive(svgElement) {
     const targetRect = svgElement.getBoundingClientRect();
     var currentTouches = Array.prototype.filter.call(evt.touches, t => controls.touch.ids.indexOf(t.identifier) > -1)
 
+    controls.touch.positions.length = currentTouches.length
+
     for(var t=currentTouches.length;t--;t>=0) {
       var clientX = currentTouches[t].clientX
       var clientY = currentTouches[t].clientY
@@ -545,31 +717,26 @@ function makeInteractive(svgElement) {
         svgElement.clientWidth, svgElement.clientHeight, 
         viewBox
       )
-      debug.touches[t].setVisible(true)
-      debug.touches[t].setPosition(local.x, local.y)
+
+      controls.touch.positions[t] = local
     }
 
-    debug.debugTouchCenter.setVisible(currentTouches.length > 1)
-    debug.debugTouchCenterInitial.setVisible(currentTouches.length > 1)
-    debug.debugTouchAngle.setVisible(currentTouches.length > 1)
-    debug.debugTouchAngleText.setVisible(currentTouches.length > 1)
-    debug.debugTouchScale.setVisible(currentTouches.length > 1)
     if(currentTouches.length > 1) {
-      var touchCenter = getTouchCenter(currentTouches)
-      var prevCenter = initial ? touchCenter : controls.touch.previousCenter
-      var initialCenter = initial ? touchCenter : controls.touch.initialCenter
-      var touchRadius = getTouchRadius(currentTouches, prevCenter)
-      var touchAngle = getTouchAngle(currentTouches, prevCenter)
+      var touchCenterGlobal = getTouchCenter(currentTouches)
+      var prevCenterGlobal = initial ? touchCenterGlobal : controls.touch.previousCenterGlobal
+      var initialCenterGlobal = initial ? touchCenterGlobal : controls.touch.initialCenterGlobal
+      var touchRadius = getTouchRadius(currentTouches, prevCenterGlobal)
+      var touchAngle = getTouchAngle(currentTouches, prevCenterGlobal)
 
-      var localCenter = screenToSVG(
-        touchCenter.x, touchCenter.y,
+      var touchCenterLocal = screenToSVG(
+        touchCenterGlobal.x, touchCenterGlobal.y,
         targetRect, 
         svgElement.clientWidth, svgElement.clientHeight, 
         viewBox
       );
 
-      var localCenterInitial = screenToSVG(
-        initialCenter.x, initialCenter.y,
+      var initialCenterLocal = screenToSVG(
+        initialCenterGlobal.x, initialCenterGlobal.y,
         targetRect, 
         svgElement.clientWidth, svgElement.clientHeight, 
         viewBox
@@ -577,52 +744,45 @@ function makeInteractive(svgElement) {
 
       if(!initial && controls.touch.previousAngle !== null && touchAngle !== null) {
         var angleDela = rotationDelta(touchAngle, controls.touch.previousAngle, currentTouches.length)
-        debug.accumulatedAngle = sumAngle(debug.accumulatedAngle, angleDela)
         var scaleFactor = touchRadius/controls.touch.previousDistance;
+        var translationDeltaX = controls.touch.previousCenterLocal.x - touchCenterLocal.x
+        var translationDeltaY = controls.touch.previousCenterLocal.y - touchCenterLocal.y
+
+        debug.accumulatedAngle = sumAngle(debug.accumulatedAngle, angleDela)
         debug.accumulatedScale = debug.accumulatedScale * scaleFactor
-        var translationDeltaX = controls.touch.previousCenter.x - touchCenter.x
-        var translationDeltaY = controls.touch.previousCenter.y - touchCenter.y
         debug.accumulatedOffsetX = debug.accumulatedOffsetX - translationDeltaX
         debug.accumulatedOffsetY = debug.accumulatedOffsetY - translationDeltaY
       }
+
       controls.touch.previousAngle = touchAngle
       controls.touch.previousDistance = touchRadius
-      controls.touch.previousCenter = touchCenter
+      controls.touch.previousCenterGlobal = touchCenterGlobal
+      controls.touch.previousCenterLocal = touchCenterLocal
+
 
       if(initial) {
+        debug.accumulatedAngle = 0
+        debug.accumulatedScale = 1
+        debug.accumulatedOffsetX = 0
+        debug.accumulatedOffsetY = 0
+
         controls.touch.initialAngle = touchAngle
         controls.touch.initialDistance = touchRadius
-        controls.touch.initialCenter = touchCenter
+
+        controls.touch.initialCenterGlobal = initialCenterGlobal
+        controls.touch.initialCenterLocal = touchCenterLocal
       }
     }
-    debug.debugTouchCount.setVisible(currentTouches.length > 0)
-    debug.debugTouchCount.setValue(currentTouches.length)
-    debug.debugTouchCenter.setPosition(localCenter.x, localCenter.y)
-    debug.debugTouchCenterInitial.setPosition(localCenterInitial.x, localCenterInitial.y)
-    debug.debugTouchAngle.setValue(debug.accumulatedAngle)
-    debug.debugTouchAngleText.setValue(Math.round(debug.accumulatedAngle*10)/10)
-    debug.debugTouchScale.setValue(touchRadius)
   }
 
   function onTouchEnd(evt) {
     var removedIds = Array.prototype.map.call(evt.changedTouches, t => t.identifier)
     controls.touch.ids = controls.touch.ids.filter(id => removedIds.indexOf(id) < 0)
 
-    while(debug.touches.length > controls.touch.ids.length) {
-      var t = debug.touches.pop()
-      t.remove()
-    }
-
     onTouchUpdate(evt, true)
   }
 
   function onTouchCancel(evt) {
-    var len = evt.changedTouches.length;
-    while(len--) {
-      var t = debug.touches.pop()
-      t.remove()
-    }
-
     onTouchUpdate(evt, true)
   }
 
@@ -761,6 +921,16 @@ function makeInteractive(svgElement) {
     return {
       x: scaledVB.minX + scaledVB.width * relativeX,
       y: scaledVB.minY + scaledVB.height * relativeY,
+    }
+  }
+
+  function svgToCamera(pos) {
+    var camCos = Math.cos(-camera.current.angle)
+    var camSin = Math.sin(-camera.current.angle)
+
+    return {
+      x: camera.current.x + camCos * (pos.x - camera.current.x) - camSin * (pos.y - camera.current.y),
+      y: camera.current.y + camSin * (pos.x - camera.current.x) + camCos * (pos.y - camera.current.y),
     }
   }
 
