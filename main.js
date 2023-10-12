@@ -791,30 +791,35 @@ function makeInteractive(svgElement) {
         var translationDeltaX = controls.touch.previousCenterLocal.x - touchCenterLocal.x
         var translationDeltaY = controls.touch.previousCenterLocal.y - touchCenterLocal.y
 
+        performGesture({
+          pivot: svgToCamera(controls.touch.previousCenterLocal),
+          panX: 1/camera.current.zoom * (Math.cos(-camera.current.angle) * translationDeltaX - Math.sin(-camera.current.angle) * translationDeltaY),
+          panY: 1/camera.current.zoom * (Math.sin(-camera.current.angle) * translationDeltaX + Math.cos(-camera.current.angle) * translationDeltaY),
+          angle: angleDela,
+          scale: scaleFactor,
+        })
+
         debug.accumulatedAngle = sumAngle(debug.accumulatedAngle, angleDela)
         debug.accumulatedScale = debug.accumulatedScale * scaleFactor
         debug.accumulatedOffsetX = debug.accumulatedOffsetX - translationDeltaX
         debug.accumulatedOffsetY = debug.accumulatedOffsetY - translationDeltaY
+      } else if(initial) {
+        controls.touch.initialAngle = touchAngle
+        controls.touch.initialDistance = touchRadius
+
+        controls.touch.initialCenterGlobal = initialCenterGlobal
+        controls.touch.initialCenterLocal = touchCenterLocal
+
+        debug.accumulatedAngle = 0
+        debug.accumulatedScale = 1
+        debug.accumulatedOffsetX = 0
+        debug.accumulatedOffsetY = 0
       }
 
       controls.touch.previousAngle = touchAngle
       controls.touch.previousDistance = touchRadius
       controls.touch.previousCenterGlobal = touchCenterGlobal
       controls.touch.previousCenterLocal = touchCenterLocal
-
-
-      if(initial) {
-        debug.accumulatedAngle = 0
-        debug.accumulatedScale = 1
-        debug.accumulatedOffsetX = 0
-        debug.accumulatedOffsetY = 0
-
-        controls.touch.initialAngle = touchAngle
-        controls.touch.initialDistance = touchRadius
-
-        controls.touch.initialCenterGlobal = initialCenterGlobal
-        controls.touch.initialCenterLocal = touchCenterLocal
-      }
     }
   }
 
