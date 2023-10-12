@@ -331,7 +331,54 @@ function makeInteractive(svgElement) {
     return Math.max(min, Math.min(max, v))
   }
 
+  function clamp2d(x, y, minX=-Infinity, minY=-Infinity, maxX=Infinity, maxY=Infinity, angle = 0) {
+    var width = maxX - minX
+    var height = maxY - minY
+    var boundsCenterX = (minX + maxX) / 2
+    var boundsCenterY = (minY + maxY) / 2
+    var boundsHalfWidth = width / 2
+    var boundsHalfHeight = height / 2
+
+    var sin_a = Math.sin(-angle);
+    var cos_a = Math.cos(-angle);
+    var xA = (cos_a * boundsHalfWidth) - (sin_a * boundsHalfHeight)
+    var yA = (sin_a * boundsHalfWidth) + (cos_a * boundsHalfHeight)
+    var xB = (cos_a * -boundsHalfWidth) - (sin_a * boundsHalfHeight)
+    var yB = (sin_a * -boundsHalfWidth) + (cos_a * boundsHalfHeight)
+    var xC = (cos_a * boundsHalfWidth) - (sin_a * -boundsHalfHeight)
+    var yC = (sin_a * boundsHalfWidth) + (cos_a * -boundsHalfHeight)
+    var xD = (cos_a * -boundsHalfWidth) - (sin_a * -boundsHalfHeight)
+    var yD = (sin_a * -boundsHalfWidth) + (cos_a * -boundsHalfHeight)
+
+    var halfWidth = Math.max(Math.abs(xA), Math.abs(xB), Math.abs(xC), Math.abs(xD))
+    var halfHeight = Math.max(Math.abs(yA), Math.abs(yB), Math.abs(yC), Math.abs(yD))
+
+    var fromCenterX = x-boundsCenterX
+    var fromCenterY = y-boundsCenterY
+
+    var rotatedX = cos_a*fromCenterX - -sin_a*fromCenterY
+    var rotatedY = -sin_a*fromCenterX + cos_a*fromCenterY
+
+    var camClampedX = clamp(rotatedX, -halfWidth, +halfWidth)
+    var camClampedY = clamp(rotatedY, -halfHeight, +halfHeight)
+
+    var invRotX = cos_a*camClampedX - sin_a*camClampedY
+    var invRotY = sin_a*camClampedX + cos_a*camClampedY
+
+    var clampedX = boundsCenterX + invRotX
+    var clampedY = boundsCenterY + invRotY
+
+    return {
+      x: isFinite(width) ? clampedX : x,
+      y: isFinite(height) ? clampedY : y,
+    }
+  }
+
   function performZoom(pivotX, pivotY, factor) {
+    if(factor === 1) {
+      return
+    }
+
     var newZoom = camera.target.zoom * factor
     var clampedZoom = clamp(newZoom, 0.1, 5)
     var realFactor = clampedZoom / camera.target.zoom
@@ -349,19 +396,26 @@ function makeInteractive(svgElement) {
   }
 
   function performPan(deltaX, deltaY) {
+    if(deltaX === 0 && deltaY === 0) {
+      return
+    }
+
     var newX = camera.target.x + deltaX
     var newY = camera.target.y + deltaY
 
-    var b = 500/Math.min(camera.current.zoom, 1)
+    var angleBonus = 1/1.41
+    var b = angleBonus*500/Math.min(camera.current.zoom, 1)
 
-    var clampedX = clamp(newX, -b, b)
-    var clampedY = clamp(newY, -b, b)
+    var clampedXY = clamp2d(newX, newY, -Infinity, -Infinity, Infinity, Infinity, camera.target.angle)
 
-    camera.target.x = clampedX
-    camera.target.y = clampedY
+    camera.target.x = clampedXY.x
+    camera.target.y = clampedXY.y
   }
 
   function performRotation(pivotX, pivotY, angleRad) {
+    if(angleRad === 0) {
+      return 0
+    }
     var newAngle = camera.target.angle + angleRad
 
     var clampedAngle = clamp(newAngle)//, -Math.PI, Math.PI)
@@ -369,15 +423,18 @@ function makeInteractive(svgElement) {
 
     camera.target.angle = clampedAngle
 
-    var dx = camera.target.x - pivotX;
-    var dy = camera.target.y - pivotY;
+    var dxPivot = camera.target.x - pivotX;
+    var dyPivot = camera.target.y - pivotY;
     var sin = Math.sin(-angleDelta)
     var cos = Math.cos(-angleDelta)
 
-    var newX = pivotX + (cos * dx - sin * dy)
-    var newY = pivotY + (sin * dx + cos * dy)
-    camera.target.x = newX
-    camera.target.y = newY
+    var newX = pivotX + (cos * dxPivot - sin * dyPivot)
+    var newY = pivotY + (sin * dxPivot + cos * dyPivot)
+
+    var dx = newX - camera.target.x
+    var dy = newY - camera.target.y
+   
+    performPan(dx, dy)
   }
 
   function performGesture(gesture) {
@@ -408,25 +465,26 @@ function makeInteractive(svgElement) {
     }
   }
 
-  function runSubTick() {
+  function runSubTick(dt, last) {
     camera.current.zoom = camera.target.zoom
     camera.current.x = camera.target.x
     camera.current.y = camera.target.y
     camera.current.angle = camera.target.angle
   }
 
-  function runTick() {
-    runSubTick()
-    for(var t=0;t<4;t++) {
-      runSubTick()
+  function runTick(dt) {
+    var targetFrameLength = 4
+    var subFrames = Math.floor(dt / targetFrameLength)
+    for(var i=1;i<=subFrames;i++) {
+      runSubTick(dt/subFrames, i===subFrames)
     }
     debug.refresh()
     render()
   }
 
-  function onAnimationFrame() {
-    runTick()
-    requestNextFrame()
+  function onAnimationFrame(prevTime, time) {
+    runTick(time - prevTime)
+    requestNextFrame(time)
   }
 
   //--
@@ -868,16 +926,17 @@ function makeInteractive(svgElement) {
 
   var animationFrame = null
   var animationRunning = false
+  var prevAniationTime = null
 
-  function requestNextFrame() {
+  function requestNextFrame(prevTime) {
     if(animationRunning) {
-      animationFrame = requestAnimationFrame(onAnimationFrame)
+      animationFrame = requestAnimationFrame(onAnimationFrame.bind(null, prevTime))
     }
   }
 
   function attachAnimation() {
     animationRunning = true
-    requestNextFrame()
+    requestNextFrame(performance.now())
   }
 
   function detachAnimation() {
