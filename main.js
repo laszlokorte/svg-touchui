@@ -327,7 +327,7 @@ function makeInteractive(svgElement) {
     bounds.maxY = maxY
   }
 
-  function clamp(v, min, max) {
+  function clamp(v, min=-Infinity, max=Infinity) {
     return Math.max(min, Math.min(max, v))
   }
 
@@ -364,7 +364,7 @@ function makeInteractive(svgElement) {
   function performRotation(pivotX, pivotY, angleRad) {
     var newAngle = camera.target.angle + angleRad
 
-    var clampedAngle = clamp(newAngle, -Math.PI/3, Math.PI/3)
+    var clampedAngle = clamp(newAngle)//, -Math.PI, Math.PI)
     var angleDelta = clampedAngle - camera.target.angle
 
     camera.target.angle = clampedAngle
@@ -506,26 +506,37 @@ function makeInteractive(svgElement) {
       debug.accumulatedMouseX = debug.accumulatedMouseX - translationDeltaX
       debug.accumulatedMouseY = debug.accumulatedMouseY - translationDeltaY
 
-      if(controls.mouse.initialCtrl) {
-        var dxA = controls.mouse.previousPressedPosition.x - controls.mouse.initialPressedPosition.x
-        var dyA = controls.mouse.previousPressedPosition.y - controls.mouse.initialPressedPosition.y
-        var dxB = local.x - controls.mouse.initialPressedPosition.x
-        var dyB = local.y - controls.mouse.initialPressedPosition.y
-        var rotA = Math.atan2(dyA, dxA)
-        var rotB = Math.atan2(dyB, dxB)
+      var dxA = controls.mouse.previousPressedPosition.x - controls.mouse.initialPressedPosition.x
+      var dyA = controls.mouse.previousPressedPosition.y - controls.mouse.initialPressedPosition.y
+      var dxB = local.x - controls.mouse.initialPressedPosition.x
+      var dyB = local.y - controls.mouse.initialPressedPosition.y
+      var rotA = Math.atan2(dyA, dxA)
+      var rotB = Math.atan2(dyB, dxB)
 
+      if(controls.mouse.initialShift && controls.mouse.initialCtrl) {
+        performGesture({
+          pivot: svgToCamera(controls.mouse.initialPressedPosition),
+          panX: 0,
+          panY: 0,
+          angle: Math.hypot(dxB, dyB) > 30 ? rotationDelta(rotB, rotA, 1) : 0,
+          scale: Math.exp((Math.hypot(dxB, dyB)-Math.hypot(dxA, dyA))/500),
+          //angle: (dxB-dxA)/300,
+          //scale: Math.exp((dyB-dyA)/300),
+        })
+      } else if(controls.mouse.initialCtrl) {
         if(Math.hypot(dxB, dyB) > 30) {
           performGesture({
             pivot: svgToCamera(controls.mouse.initialPressedPosition),
             panX: 0,
             panY: 0,
             angle: rotationDelta(rotB, rotA, 1),
-            scale: Math.exp((Math.hypot(dxB, dyB)-Math.hypot(dxA, dyA))/500),
+            scale: 1,
+            //scale: Math.exp((Math.hypot(dxB, dyB)-Math.hypot(dxA, dyA))/500),
             //angle: (dxB-dxA)/300,
             //scale: Math.exp((dyB-dyA)/300),
           })
         }
-      } else if(controls.mouse.initialAlt) {
+      } else if(controls.mouse.initialShift) {
         var dxA = controls.mouse.previousPressedPosition.x - controls.mouse.initialPressedPosition.x
         var dyA = controls.mouse.previousPressedPosition.y - controls.mouse.initialPressedPosition.y
         var dxB = local.x - controls.mouse.initialPressedPosition.x
