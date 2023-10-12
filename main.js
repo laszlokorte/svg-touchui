@@ -444,22 +444,50 @@ function makeInteractive(svgElement) {
     var d = (evt.deltaY || evt.deltaX) / -38
     debug.accumulatedWheel += d
 
-    if(evt.ctrlKey) {
-      performGesture({
-        pivot: svgToCamera(local),
-        panX: 0,
-        panY: 0,
-        angle: d / 20,
-        scale: 1,
-      })
+    if(!controls.mouse.isPressed) {
+      if(evt.ctrlKey) {
+        performGesture({
+          pivot: svgToCamera(local),
+          panX: 0,
+          panY: 0,
+          angle: d / 20,
+          scale: 1,
+        })
+      } else {
+        performGesture({
+          pivot: svgToCamera(local),
+          panX: 0,
+          panY: 0,
+          angle: 0,
+          scale: Math.exp(d / 20),
+        })
+      }
     } else {
-      performGesture({
-        pivot: svgToCamera(local),
-        panX: 0,
-        panY: 0,
-        angle: 0,
-        scale: Math.exp(d / 20),
-      })
+      if(!controls.mouse.initialCtrl && !controls.mouse.initialShift) {
+        performGesture({
+          pivot: svgToCamera(local),
+          panX: 0,
+          panY: 0,
+          angle: 0,
+          scale: Math.exp(d / 20),
+        })
+      } else if(!controls.mouse.initialCtrl && controls.mouse.initialShift) {
+        performGesture({
+          pivot: svgToCamera(controls.mouse.initialPressedPosition),
+          panX: 0,
+          panY: 0,
+          angle: d / 20,
+          scale: 1,
+        })
+      } else {
+        performGesture({
+          pivot: svgToCamera(controls.mouse.initialPressedPosition),
+          panX: 0,
+          panY: 0,
+          angle: 0,
+          scale: Math.exp(d / 20),
+        })
+      }
     }
   }
 
