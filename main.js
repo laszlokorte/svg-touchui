@@ -342,16 +342,20 @@ function makeInteractive(svgElement) {
 
     var newX = camera.target.x + (pivotX - camera.target.x) * panFactor
     var newY = camera.target.y + (pivotY - camera.target.y) * panFactor
-    camera.target.x = newX
-    camera.target.y = newY
+    var dx = newX - camera.target.x
+    var dy = newY - camera.target.y
+   
+    performPan(dx, dy)
   }
 
   function performPan(deltaX, deltaY) {
     var newX = camera.target.x + deltaX
     var newY = camera.target.y + deltaY
 
-    var clampedX = clamp(newX, -500, 500)
-    var clampedY = clamp(newY, -500, 500)
+    var b = 500/Math.min(camera.current.zoom, 1)
+
+    var clampedX = clamp(newX, -b, b)
+    var clampedY = clamp(newY, -b, b)
 
     camera.target.x = clampedX
     camera.target.y = clampedY
@@ -929,8 +933,8 @@ function makeInteractive(svgElement) {
     var camSin = Math.sin(-camera.current.angle)
 
     return {
-      x: camera.current.x + camCos * (pos.x - camera.current.x) - camSin * (pos.y - camera.current.y),
-      y: camera.current.y + camSin * (pos.x - camera.current.x) + camCos * (pos.y - camera.current.y),
+      x: camera.current.x + (camCos * (pos.x) - camSin * (pos.y)) / camera.current.zoom,
+      y: camera.current.y + (camSin * (pos.x) + camCos * (pos.y)) / camera.current.zoom,
     }
   }
 
@@ -969,14 +973,14 @@ function makeInteractive(svgElement) {
 
   var viewBox = parseViewBox(svgElement.getAttribute('viewBox'), svgElement.getAttribute('preserveAspectRatio'))
 
-  console.log(
-  	!!viewBoxPan,
-		!!viewBoxZoom,
-		!!viewBoxBounds,
-		!!elRotator,
-		!!elBounds,
-    viewBox
-  )
+  // console.log(
+  // 	!!viewBoxPan,
+	// 	!!viewBoxZoom,
+	// 	!!viewBoxBounds,
+	// 	!!elRotator,
+	// 	!!elBounds,
+  //   viewBox
+  // )
 
 	svgElement.classList.toggle('is-zoomable', canZoom)
 	svgElement.classList.toggle('is-rotatable', canRotate)
