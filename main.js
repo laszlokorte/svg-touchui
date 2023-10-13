@@ -95,13 +95,30 @@ function makeInteractive(svgElement) {
 
   var doubleTabRadius = 100;
 
-  var bounds = {
+  var softBounds = {
     width: Infinity,
     height: Infinity,
     minX: -Infinity,
     maxX: Infinity,
     minY: -Infinity,
     maxY: Infinity,
+    minZoom: -Infinity,
+    maxZoom: Infinity,
+    minAngle: -Infinity,
+    maxAngle: Infinity,
+  };
+
+  var hardBounds = {
+    width: Infinity,
+    height: Infinity,
+    minX: -Infinity,
+    maxX: Infinity,
+    minY: -Infinity,
+    maxY: Infinity,
+    minZoom: -Infinity,
+    maxZoom: Infinity,
+    minAngle: -Infinity,
+    maxAngle: Infinity,
   };
 
   function setupDebugger(containerElement) {
@@ -318,17 +335,39 @@ function makeInteractive(svgElement) {
     }
   }
 
-  function setBounds(minX, minY, maxX, maxY) {
-    bounds.width = isFinite(minX) && isFinite(maxX) ? (maxX - minX) : Infinity
-    bounds.height = isFinite(minX) && isFinite(maxX) ? (maxY - minY) : Infinity
-    bounds.minX = minX
-    bounds.minY = minY
-    bounds.maxX = maxX
-    bounds.maxY = maxY
+  function setSoftBounds(minX, minY, maxX, maxY) {
+    softBounds.width = isFinite(minX) && isFinite(maxX) ? (maxX - minX) : Infinity
+    softBounds.height = isFinite(minX) && isFinite(maxX) ? (maxY - minY) : Infinity
+    softBounds.minX = minX
+    softBounds.minY = minY
+    softBounds.maxX = maxX
+    softBounds.maxY = maxY
+    softBounds.minAngle = -Infinity
+    softBounds.maxAngle = Infinity
+    softBounds.minZoom = -1
+    softBounds.maxZoom = 4
+  }
+
+  function setHardBounds(minX, minY, maxX, maxY) {
+    hardBounds.width = isFinite(minX) && isFinite(maxX) ? (maxX - minX) : Infinity
+    hardBounds.height = isFinite(minX) && isFinite(maxX) ? (maxY - minY) : Infinity
+    hardBounds.minX = minX
+    hardBounds.minY = minY
+    hardBounds.maxX = maxX
+    hardBounds.maxY = maxY
   }
 
   function clamp(v, min=-Infinity, max=Infinity) {
     return Math.max(min, Math.min(max, v))
+  }
+
+  function softClamp(v, a, b, stiffness = 0.9) {
+    var min = Math.min(a, b)
+    var max = Math.max(a, b)
+    var softness = 1-stiffness;
+    var clamped = clamp(v, min, max)
+
+    return clamped * stiffness + v * softness
   }
 
   function clamp2d(x, y, minX=-Infinity, minY=-Infinity, maxX=Infinity, maxY=Infinity, angle = 0) {
@@ -374,15 +413,24 @@ function makeInteractive(svgElement) {
     }
   }
 
+  function softClamp2d(x, y, minX, minY, maxX, maxY, angle = 0, stiffness = 0.9) {
+    var softness = 1-stiffness;
+    var clamped = clamp2d(x, y, minX, minY, maxX, maxY, angle)
+
+    return {
+      x: clamped.x * stiffness + x * softness,
+      y: clamped.y * stiffness + y * softness,
+    }
+  }
+
   function performZoom(pivotX, pivotY, factor) {
     if(factor === 1) {
       return
     }
 
     var newZoom = camera.target.zoom * factor
-    var clampedZoom = clamp(newZoom, 0.1, 5)
-    var realFactor = clampedZoom / camera.target.zoom
-
+    var clampedZoom = clamp(newZoom, hardBounds.minZoom, hardBounds.maxZoom)
+    var realFactor = clampZoom(newZoom) / clampZoom(camera.target.zoom)
     camera.target.zoom = clampedZoom
 
     var panFactor = 1 - 1 / realFactor;
@@ -403,10 +451,7 @@ function makeInteractive(svgElement) {
     var newX = camera.target.x + deltaX
     var newY = camera.target.y + deltaY
 
-    var angleBonus = 1/1.41
-    var b = angleBonus*500/Math.min(camera.current.zoom, 1)
-
-    var clampedXY = clamp2d(newX, newY, -Infinity, -Infinity, Infinity, Infinity, camera.target.angle)
+    var clampedXY = clamp2d(newX, newY, hardBounds.minX, hardBounds.minY,hardBounds.maxX,hardBounds.maxY, camera.target.angle)
 
     camera.target.x = clampedXY.x
     camera.target.y = clampedXY.y
@@ -418,7 +463,7 @@ function makeInteractive(svgElement) {
     }
     var newAngle = camera.target.angle + angleRad
 
-    var clampedAngle = clamp(newAngle)//, -Math.PI, Math.PI)
+    var clampedAngle = clamp(newAngle, hardBounds.minAngle, hardBounds.maxAngle)
     var angleDelta = clampedAngle - camera.target.angle
 
     camera.target.angle = clampedAngle
@@ -466,10 +511,35 @@ function makeInteractive(svgElement) {
   }
 
   function runSubTick(dt, last) {
-    camera.current.zoom = camera.target.zoom
-    camera.current.x = camera.target.x
-    camera.current.y = camera.target.y
-    camera.current.angle = camera.target.angle
+    var boundsWidthHalf = (softBounds.maxX - softBounds.minX) / 2
+    var boundsHeightHalf = (softBounds.maxY - softBounds.minY) / 2
+    var boundsCX = (softBounds.maxX + softBounds.minX) / 2
+    var boundsCY = (softBounds.maxY + softBounds.minY) / 2
+    var b = 1/Math.min(camera.current.zoom*1.41, 1/1.41)
+
+    var clampedXY = softClamp2d(
+      camera.target.x, camera.target.y, 
+      boundsCX - boundsWidthHalf*b, boundsCY - boundsHeightHalf*b, 
+      boundsCX + boundsWidthHalf*b, boundsCY + boundsHeightHalf*b,
+      camera.target.angle,
+      0.5
+    )
+
+    camera.current.zoom = clampZoom(camera.target.zoom)
+    camera.current.x = clampedXY.x
+    camera.current.y = clampedXY.y
+    camera.current.angle = softClamp(camera.target.angle, softBounds.minAngle, softBounds.maxAngle, 0.9)
+
+    if(!controls.mouse.isPressed) {
+      camera.target.zoom = Math.exp(Math.log(camera.current.zoom)*0.1+Math.log(camera.target.zoom)*0.9)
+      camera.target.x = (camera.current.x*0.1+camera.target.x*0.9)
+      camera.target.y = (camera.current.y*0.1+camera.target.y*0.9)
+      camera.target.angle = (camera.current.angle*0.1+camera.target.angle*0.9)
+    }
+  }
+
+  function clampZoom(target) {
+    return Math.exp(softClamp(Math.log(target), softBounds.minZoom, softBounds.maxZoom, 0.9))
   }
 
   function runTick(dt) {
@@ -1070,11 +1140,13 @@ function makeInteractive(svgElement) {
   var elBounds = svgElement.querySelector('[use-bounds]')
   var elDebugger = svgElement.querySelector('[show-debug]')
 
+
   var canZoom = !!viewBoxZoom || !!elZoomer
   var canPan = !!viewBoxPan || !!elPanner
   var canRotate = !!elRotator
 
   var viewBox = parseViewBox(svgElement.getAttribute('viewBox'), svgElement.getAttribute('preserveAspectRatio'))
+  setSoftBounds(viewBox.minX, viewBox.minY, viewBox.minX + viewBox.width, viewBox.minY + viewBox.height)
 
   // console.log(
   // 	!!viewBoxPan,
