@@ -833,9 +833,7 @@ function makeInteractive(svgElement) {
   }
 
   function onDoubleClick(evt) {
-     camera.momentum.x = 10
-     camera.momentum.y = 10
-    
+
   }
 
   //--

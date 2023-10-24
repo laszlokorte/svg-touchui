@@ -17,6 +17,7 @@
 			</g>
 			<g show-debug class="light-overlay"></g>
 		</svg>
+		<button class="debug-button" type="button" onclick="document.body.classList.toggle('debug')">Debug</button>
 	</div>
 </body>
 </html>

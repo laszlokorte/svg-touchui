@@ -11,7 +11,7 @@ html, body {
 	inset: 0;
 	display: grid;
 	grid-template-columns: 1fr;
-	grid-template-rows: 3fr 1fr;
+	grid-template-rows: 1fr auto;
 	justify-content: stretch;
 	align-content: stretch;
 	height: 100%;
@@ -26,7 +26,7 @@ svg {
 	height: 100%;
 	touch-action: none;
 	grid-row: 1;
-	background: #fffff0;
+	background: #fffffe;
 }
 .is-zoomable {
 	cursor: zoom-in;
@@ -41,4 +41,15 @@ svg {
 
 .light-overlay {
 	opacity: 0.4;
+}
+
+body.debug .light-overlay {
+	display: none;
+}
+
+.debug-button {
+	height: 2em;
+	text-align: center;
+	font: inherit;
+	cursor: pointer;
 }
