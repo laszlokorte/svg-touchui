@@ -1,3 +1,4 @@
+const ABS_EPSILON =  0.00001
 function makeInteractive(svgElement) {
   var xmlnsSvg = "http://www.w3.org/2000/svg";
 
@@ -87,6 +88,9 @@ function makeInteractive(svgElement) {
   var bounds = {
     damping: 0.5,
     springForce: 0.01,
+    springForceAcceleration: 0.08/4,
+    springForceDeceleration: 0.03/4,
+    friction: 0.01,
     width: Infinity,
     height: Infinity,
     minX: -Infinity,
@@ -327,7 +331,7 @@ function makeInteractive(svgElement) {
   }
 
   function clamp(v, min=-Infinity, max=Infinity) {
-    return Math.max(min, Math.min(max, v))
+    return Math.max(Math.min(min, max), Math.min(Math.max(min, max), v))
   }
 
   function isInside(v, min=-Infinity, max=Infinity) {
@@ -340,15 +344,6 @@ function makeInteractive(svgElement) {
 
   function interp(a, b, t) {
     return a*(1-t) + b*t
-  }
-
-  function softClamp(v, a, b, stiffness = 0.9) {
-    var min = Math.min(a, b)
-    var max = Math.max(a, b)
-    var softness = 1-stiffness;
-    var clamped = clamp(v, min, max)
-
-    return clamped * stiffness + v * softness
   }
 
   function clamp2d(x, y, minX=-Infinity, minY=-Infinity, maxX=Infinity, maxY=Infinity, angle = 0) {
@@ -394,47 +389,6 @@ function makeInteractive(svgElement) {
     }
   }
 
-  function isInside2D(x, y, minX=-Infinity, minY=-Infinity, maxX=Infinity, maxY=Infinity, angle = 0) {
-    var width = maxX - minX
-    var height = maxY - minY
-    var boundsCenterX = (minX + maxX) / 2
-    var boundsCenterY = (minY + maxY) / 2
-    var boundsHalfWidth = width / 2
-    var boundsHalfHeight = height / 2
-
-    var sin_a = Math.sin(-angle);
-    var cos_a = Math.cos(-angle);
-    var xA = (cos_a * boundsHalfWidth) - (sin_a * boundsHalfHeight)
-    var yA = (sin_a * boundsHalfWidth) + (cos_a * boundsHalfHeight)
-    var xB = (cos_a * -boundsHalfWidth) - (sin_a * boundsHalfHeight)
-    var yB = (sin_a * -boundsHalfWidth) + (cos_a * boundsHalfHeight)
-    var xC = (cos_a * boundsHalfWidth) - (sin_a * -boundsHalfHeight)
-    var yC = (sin_a * boundsHalfWidth) + (cos_a * -boundsHalfHeight)
-    var xD = (cos_a * -boundsHalfWidth) - (sin_a * -boundsHalfHeight)
-    var yD = (sin_a * -boundsHalfWidth) + (cos_a * -boundsHalfHeight)
-
-    var halfWidth = Math.max(Math.abs(xA), Math.abs(xB), Math.abs(xC), Math.abs(xD))
-    var halfHeight = Math.max(Math.abs(yA), Math.abs(yB), Math.abs(yC), Math.abs(yD))
-
-    var fromCenterX = x-boundsCenterX
-    var fromCenterY = y-boundsCenterY
-
-    var rotatedX = cos_a*fromCenterX - -sin_a*fromCenterY
-    var rotatedY = -sin_a*fromCenterX + cos_a*fromCenterY
-
-    return isInside(rotatedX, -halfWidth, +halfWidth) && isInside(rotatedY, -halfHeight, +halfHeight)
-  }
-
-  function softClamp2d(x, y, minX, minY, maxX, maxY, angle = 0, stiffness = 0.9) {
-    var softness = 1-stiffness;
-    var clamped = clamp2d(x, y, minX, minY, maxX, maxY, angle)
-
-    return {
-      x: clamped.x * stiffness + x * softness,
-      y: clamped.y * stiffness + y * softness,
-    }
-  }
-
   function boundsPadding(bounds, currentZoomLog, currentAngle) {
     const clampedZoomLog = clamp(currentZoomLog, bounds.minZoomLog, bounds.maxZoomLog)
     const clampedZoom = Math.exp(clampedZoomLog)
@@ -444,9 +398,9 @@ function makeInteractive(svgElement) {
     const sin = Math.sin(currentAngle)
     const cos = Math.cos(currentAngle)
 
-    return {
-      x: Math.abs(cos * w - sin * h)/2 * (1-clampedZoom)/clampedZoom,
-      y: Math.abs(sin * w + cos * h)/2 * (1-clampedZoom)/clampedZoom,
+    return { 
+      x: w/3 * (1-clampedZoom)/clampedZoom,
+      y: h/3 * (1-clampedZoom)/clampedZoom,
     }
   }
 
@@ -545,58 +499,95 @@ function makeInteractive(svgElement) {
   }
 
   function runSubTick(dt, last) {
-    if(!controls.mouse.isPressed && controls.touch.ids.length === 0) {
-      performFriction(dt)
+    controls.wheel.time += dt
+    if(!controls.mouse.isPressed && controls.touch.ids.length === 0 && controls.wheel.time > 100) {
       performSpring()
-      performMomentum(dt)
+      performMomentum(dt)      
+      performFriction(dt)
     } else {
       trackMomentum(dt)
     }
   }
 
   function performFriction(dt) {
-     camera.momentum.x *= Math.exp(Math.log(0.99)*dt)
-     camera.momentum.y *= Math.exp(Math.log(0.99)*dt)
+    camera.momentum.x *= Math.exp(Math.log(1-bounds.friction)*dt)
+    camera.momentum.y *= Math.exp(Math.log(1-bounds.friction)*dt)
+    camera.momentum.angle *= Math.exp(Math.log(1-bounds.friction)*dt)
+    camera.momentum.zoomLog *= Math.exp(Math.log(1-bounds.friction)*dt)
 
-     if(Math.abs(camera.momentum.x) < .1) {
-       camera.momentum.x = 0
-     }
-     if(Math.abs(camera.momentum.y) < .1) {
-       camera.momentum.y = 0
-     }
+    if(Math.abs(camera.momentum.x) + Math.abs(camera.momentum.y) < ABS_EPSILON) {
+     camera.momentum.x = 0
+     camera.momentum.y = 0
+    }
+
+    if(Math.abs(camera.momentum.angle) < ABS_EPSILON) {
+      camera.momentum.angle = 0
+      //camera.current.angle = clamp(camera.current.angle, bounds.minAngle, bounds.maxAngle)
+    }
+    if(Math.abs(camera.momentum.zoomLog) < ABS_EPSILON) {
+      camera.momentum.zoomLog = 0
+      //camera.current.zoomLog  = clamp(camera.current.zoomLog, bounds.minZoomLog, bounds.maxZoomLog)
+    }
   }
 
   function performSpring() {
     const clampedAngle = clamp(camera.current.angle, bounds.minAngle, bounds.maxAngle)
     const clampedZoomLog = clamp(camera.current.zoomLog, bounds.minZoomLog, bounds.maxZoomLog)
     const clampedZoom = Math.exp(clampedZoomLog)
-    const padding = boundsPadding(bounds, camera.current.zoomLog, clampedAngle)
-
+    const padding = boundsPadding(bounds, clampedZoomLog, clampedAngle)
     const clampedXY = clamp2d(camera.current.x, camera.current.y, bounds.minX - padding.x, bounds.minY - padding.y, bounds.maxX + padding.x, bounds.maxY + padding.y, clampedAngle)
   
     const dAngle = camera.current.angle - clampedAngle
     const dZoomLog = camera.current.zoomLog - clampedZoomLog
-    const dx = camera.current.x - clampedXY.x
-    const dy = camera.current.y - clampedXY.y
+    let dx = camera.current.x - clampedXY.x
+    let dy = camera.current.y - clampedXY.y
+    const dl = Math.hypot(dx, dy)
 
-    camera.momentum.x = -dx * bounds.springForce
-    camera.momentum.y = -dy * bounds.springForce
+
+    // TODO FIX Zoom + Pan Combination
+    const deflectionAndVelocityAlignedX = (dx*camera.momentum.x) > ABS_EPSILON
+    const deflectionAndVelocityAlignedY = (dy*camera.momentum.y) > ABS_EPSILON
+    const deflectionAndVelocityAligned = (dx*camera.momentum.x + dy*camera.momentum.y) > ABS_EPSILON
+
+    // if(deflectionAndVelocityAlignedX) {
+    //   camera.momentum.x += -dx*bounds.springForceDeceleration
+    // } else if(dx) {
+    //   camera.momentum.x = -dx*bounds.springForceAcceleration
+    // }
+
+    // if(deflectionAndVelocityAlignedY) {
+    //   camera.momentum.y += -dy*bounds.springForceDeceleration
+    // } else if(dy) {
+    //   camera.momentum.y = -dy*bounds.springForceAcceleration
+    // }
+
+    if(Math.abs(dZoomLog) < .01) {
+      if(deflectionAndVelocityAligned) {
+        camera.momentum.x += -dx*bounds.springForceDeceleration
+        camera.momentum.y += -dy*bounds.springForceDeceleration
+      } else {
+        if(Math.abs(dx) > ABS_EPSILON) {
+          camera.momentum.x = -dx*bounds.springForceAcceleration
+        }
+        if(Math.abs(dy) > ABS_EPSILON) {
+          camera.momentum.y = -dy*bounds.springForceAcceleration
+        }
+      }
+    }
+
     camera.momentum.angle = -dAngle * bounds.springForce
     camera.momentum.zoomLog = -dZoomLog * bounds.springForce
   }
 
   function performMomentum(dt) {
-    camera.current.x += camera.momentum.x * dt
-    camera.current.y += camera.momentum.y * dt
+    const dx = (camera.current.x + camera.momentum.x * dt) - camera.current.pivot.x
+    const dy = (camera.current.y + camera.momentum.y * dt) - camera.current.pivot.y
+    const sin = Math.sin(camera.momentum.angle * dt)
+    const cos = Math.cos(camera.momentum.angle * dt)
+    const panFactor = (1 - 1 / Math.exp(camera.momentum.zoomLog * dt));
+     
     camera.current.angle += camera.momentum.angle * dt
     camera.current.zoomLog += camera.momentum.zoomLog * dt
-
-    const dx = camera.current.x - camera.current.pivot.x
-    const dy = camera.current.y - camera.current.pivot.y
-    const sin = Math.sin(-camera.momentum.angle * dt)
-    const cos = Math.cos(-camera.momentum.angle * dt)
-    const panFactor = (1 - 1 / Math.exp(camera.momentum.zoomLog * dt));
-
     camera.current.x = camera.current.pivot.x + (cos * dx - sin * dy) - (dx) * panFactor
     camera.current.y = camera.current.pivot.y + (sin * dx + cos * dy) - (dy) * panFactor
   }
@@ -610,11 +601,16 @@ function makeInteractive(svgElement) {
 
       const dx = (camera.current.x - avgX) / dt / dt
       const dy = (camera.current.y - avgY) / dt / dt
-      const dAngle = (camera.current.angle - avgAngle) / dt / dt
-      const dZoomLog = (camera.current.zoomLog - avgZoomLog) / dt / dt
+      const dAngle = (camera.current.angle - avgAngle) / dt 
+      const dZoomLog = (camera.current.zoomLog - avgZoomLog) / dt 
 
-      camera.momentum.x = dx
-      camera.momentum.y = dy
+      if(Math.abs(dZoomLog) < .01 && Math.abs(dAngle) < .01) {
+        camera.momentum.x = dx
+        camera.momentum.y = dy
+      } else {
+        camera.momentum.x = 0
+        camera.momentum.y = 0
+      }
     }
     
     const i = camera.tracking.index++;
@@ -656,6 +652,8 @@ function makeInteractive(svgElement) {
 
     var d = (evt.deltaY || evt.deltaX) / -38
     debug.accumulatedWheel += d
+
+    controls.wheel.time = 0
 
     if(!controls.mouse.isPressed) {
       if(evt.ctrlKey) {
@@ -832,10 +830,11 @@ function makeInteractive(svgElement) {
   }
 
   function onClick(evt) {
-    
   }
 
   function onDoubleClick(evt) {
+     camera.momentum.x = 10
+     camera.momentum.y = 10
     
   }
 
